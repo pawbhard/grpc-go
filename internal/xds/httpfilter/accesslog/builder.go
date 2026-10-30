@@ -57,22 +57,9 @@ func (builder) IsTerminal() bool {
 }
 
 func (builder) BuildClientFilter(httpfilter.ClientFilterOptions) httpfilter.ClientFilter {
-	return filter{}
+	return newFilter()
 }
 
 func (builder) BuildServerFilter() httpfilter.ServerFilter {
-	return filter{}
+	return newFilter()
 }
-
-// filter builds no interceptors yet.
-type filter struct{}
-
-func (filter) BuildClientInterceptor(_, _ httpfilter.FilterConfig) (httpfilter.ClientInterceptor, error) {
-	return nil, nil
-}
-
-func (filter) BuildServerInterceptor(_, _ httpfilter.FilterConfig) (httpfilter.ServerInterceptor, error) {
-	return nil, nil
-}
-
-func (filter) Close() {}
