@@ -33,6 +33,7 @@ import (
 	"google.golang.org/grpc/internal/envconfig"
 	"google.golang.org/grpc/internal/xds/bootstrap"
 	"google.golang.org/grpc/internal/xds/httpfilter"
+	"google.golang.org/grpc/internal/xds/httpfilter/accesslog"
 	"google.golang.org/grpc/internal/xds/xdsclient/xdsresource/version"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -124,8 +125,34 @@ func processClientSideListener(lis *v3listenerpb.Listener, bc *bootstrap.Config,
 	if hcm.HTTPFilters, err = processHTTPFilters(apiLis.GetHttpFilters(), false, bc, sc); err != nil {
 		return nil, err
 	}
+	if hcm.HTTPFilters, err = prependAccessLogFilter(hcm.HTTPFilters, apiLis, bc, sc); err != nil {
+		return nil, err
+	}
 
 	return &ListenerUpdate{APIListener: hcm}, nil
+}
+
+// prependAccessLogFilter parses the access_log field of hcm. If the field has
+// supported access loggers, it adds the access log filter as the first
+// (outermost) HTTP filter, so that the filter sees the statuses of all other
+// filters.
+func prependAccessLogFilter(filters []HTTPFilter, hcm *v3httppb.HttpConnectionManager, bc *bootstrap.Config, sc *bootstrap.ServerConfig) ([]HTTPFilter, error) {
+	cfg, err := accesslog.ParseAccessLogs(hcm.GetAccessLog(), httpfilter.ParseOptions{BootstrapConfig: bc, ServerConfig: sc})
+	if err != nil {
+		return nil, fmt.Errorf("invalid access_log: %v", err)
+	}
+	if cfg == nil {
+		return filters, nil
+	}
+	for _, f := range filters {
+		if f.Name == accesslog.FilterName {
+			for _, l := range cfg.Loggers {
+				l.Collector.Close()
+			}
+			return nil, fmt.Errorf("http filter name %q is reserved", accesslog.FilterName)
+		}
+	}
+	return append([]HTTPFilter{{Name: accesslog.FilterName, Filter: accesslog.Builder(), Config: cfg}}, filters...), nil
 }
 
 func unwrapHTTPFilterConfig(config *anypb.Any) (proto.Message, string, error) {
