@@ -46,6 +46,7 @@ import (
 	"google.golang.org/grpc/internal/envconfig"
 	"google.golang.org/grpc/internal/grpcsync"
 	"google.golang.org/grpc/internal/grpcutil"
+	"google.golang.org/grpc/internal/serverfinish"
 	istats "google.golang.org/grpc/internal/stats"
 	"google.golang.org/grpc/internal/transport"
 	"google.golang.org/grpc/keepalive"
@@ -1434,7 +1435,11 @@ func (s *Server) processRPC(ctx context.Context, stream *transport.ServerStream,
 	// Execute the xDS HTTP filter interceptors.
 	var appErr error
 	var wrappedStream ServerStream = ss
+	// finish is non-nil only when xDS HTTP filters are in use. It lets the
+	// filters observe the final status of the RPC.
+	var finish *serverfinish.Registry
 	if s.opts.streamWrapper != nil {
+		ss.ctx, finish = serverfinish.NewContext(ss.ctx)
 		wrappedStream, appErr = s.opts.streamWrapper(ss)
 	}
 
@@ -1497,6 +1502,9 @@ func (s *Server) processRPC(ctx context.Context, stream *transport.ServerStream,
 		if err := ss.s.WriteStatus(appStatus); err != nil {
 			channelz.Warningf(logger, s.channelz, "grpc: Server.processRPC failed to write status: %v", err)
 		}
+		if finish != nil {
+			runFinishCallbacks(finish, ss, appStatus.Err())
+		}
 		return appErr
 	}
 	if trInfo != nil {
@@ -1516,7 +1524,17 @@ func (s *Server) processRPC(ctx context.Context, stream *transport.ServerStream,
 	if err := ss.s.WriteStatus(statusOK); err != nil {
 		channelz.Warningf(logger, s.channelz, "grpc: Server.processRPC failed to write status: %v", err)
 	}
+	if finish != nil {
+		runFinishCallbacks(finish, ss, nil)
+	}
 	return err
+}
+
+// runFinishCallbacks runs the callbacks that xDS HTTP filters registered for
+// the RPC on ss. err is the final status of the RPC, or nil for OK.
+func runFinishCallbacks(r *serverfinish.Registry, ss *serverStream, err error) {
+	header, _ := ss.s.Header()
+	r.Run(&serverfinish.Info{Err: err, Header: header, Trailer: ss.s.Trailer()})
 }
 
 func (s *Server) handleMalformedMethodName(stream *transport.ServerStream, ti *traceInfo) {

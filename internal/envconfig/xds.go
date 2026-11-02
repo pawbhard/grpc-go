@@ -107,4 +107,9 @@ var (
 	// XDSAutoshardingEnabled controls whether the autosharding LB policy is
 	// supported by the xDS LB policy registry. See gRFC A119 for more details.
 	XDSAutoshardingEnabled = boolFromEnv("GRPC_XDS_EXPERIMENTAL_ENABLE_AUTOSHARDING_LB", false)
+
+	// XDSOTelAccessLogEnabled controls whether gRPC writes OpenTelemetry access
+	// logs for the OpenTelemetryAccessLogConfig entries of the xDS
+	// HttpConnectionManager access_log field.
+	XDSOTelAccessLogEnabled = boolFromEnv("GRPC_EXPERIMENTAL_XDS_OTEL_ACCESS_LOG", false)
 )

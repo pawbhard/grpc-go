@@ -125,6 +125,9 @@ func processNetworkFilters(filters []*v3listenerpb.Filter, bc *bootstrap.Config,
 			if err != nil {
 				return nil, fmt.Errorf("network filters {%+v} had invalid server side HTTP Filters {%+v}: %v", filters, hcm.GetHttpFilters(), err)
 			}
+			if filters, err = prependAccessLogFilter(filters, hcm, bc, sc); err != nil {
+				return nil, fmt.Errorf("network filter %q: %v", name, err)
+			}
 			if !seenHCM {
 				// Validate for RBAC in only the HCM that will be used, since this isn't a logical validation failure,
 				// it's simply a validation to support RBAC HTTP Filter.
